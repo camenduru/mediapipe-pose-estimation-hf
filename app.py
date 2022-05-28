@@ -24,7 +24,7 @@ mp_pose = mp.solutions.pose
 
 TITLE = 'MediaPipe Human Pose Estimation'
 DESCRIPTION = 'https://google.github.io/mediapipe/'
-ARTICLE = None
+ARTICLE = '<center><img src="https://visitor-badge.glitch.me/badge?page_id=hysts.mediapipe-pose-estimation" alt="visitor badge"/></center>'
 
 TOKEN = os.environ['TOKEN']
 
