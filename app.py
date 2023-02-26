@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-import argparse
 import os
 import pathlib
+import shlex
 import subprocess
 import tarfile
 
 if os.environ.get('SYSTEM') == 'spaces':
-    subprocess.call('pip uninstall -y opencv-python'.split())
-    subprocess.call('pip uninstall -y opencv-python-headless'.split())
-    subprocess.call('pip install opencv-python-headless==4.5.5.64'.split())
+    subprocess.call(shlex.split('pip uninstall -y opencv-python'))
+    subprocess.call(shlex.split('pip uninstall -y opencv-python-headless'))
+    subprocess.call(
+        shlex.split('pip install opencv-python-headless==4.5.5.64'))
 
 import gradio as gr
 import huggingface_hub
@@ -24,22 +25,8 @@ mp_pose = mp.solutions.pose
 
 TITLE = 'MediaPipe Human Pose Estimation'
 DESCRIPTION = 'https://google.github.io/mediapipe/'
-ARTICLE = '<center><img src="https://visitor-badge.glitch.me/badge?page_id=hysts.mediapipe-pose-estimation" alt="visitor badge"/></center>'
 
-TOKEN = os.environ['TOKEN']
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--theme', type=str)
-    parser.add_argument('--live', action='store_true')
-    parser.add_argument('--share', action='store_true')
-    parser.add_argument('--port', type=int)
-    parser.add_argument('--disable-queue',
-                        dest='enable_queue',
-                        action='store_false')
-    parser.add_argument('--allow-flagging', type=str, default='never')
-    return parser.parse_args()
+HF_TOKEN = os.getenv('HF_TOKEN')
 
 
 def load_sample_images() -> list[pathlib.Path]:
@@ -52,7 +39,7 @@ def load_sample_images() -> list[pathlib.Path]:
             path = huggingface_hub.hf_hub_download(dataset_repo,
                                                    name,
                                                    repo_type='dataset',
-                                                   use_auth_token=TOKEN)
+                                                   use_auth_token=HF_TOKEN)
             with tarfile.open(path) as f:
                 f.extractall(image_dir.as_posix())
     return sorted(image_dir.rglob('*.jpg'))
@@ -74,7 +61,7 @@ def run(image: np.ndarray, model_complexity: int, enable_segmentation: bool,
         elif background_color == 'black':
             bg_color = 0
         elif background_color == 'green':
-            bg_color = (0, 255, 0)
+            bg_color = (0, 255, 0)  # type: ignore
         else:
             raise ValueError
 
@@ -92,50 +79,35 @@ def run(image: np.ndarray, model_complexity: int, enable_segmentation: bool,
     return res[:, :, ::-1]
 
 
-def main():
-    args = parse_args()
+model_complexities = list(range(3))
+background_colors = ['white', 'black', 'green']
 
-    model_complexities = list(range(3))
-    background_colors = ['white', 'black', 'green']
+image_paths = load_sample_images()
+examples = [[
+    path.as_posix(), model_complexities[1], True, 0.5, background_colors[0]
+] for path in image_paths]
 
-    image_paths = load_sample_images()
-    examples = [[
-        path.as_posix(), model_complexities[1], True, 0.5, background_colors[0]
-    ] for path in image_paths]
-
-    gr.Interface(
-        run,
-        [
-            gr.inputs.Image(type='numpy', label='Input'),
-            gr.inputs.Radio(model_complexities,
-                            type='index',
-                            default=model_complexities[1],
-                            label='Model Complexity'),
-            gr.inputs.Checkbox(default=True, label='Enable Segmentation'),
-            gr.inputs.Slider(0,
-                             1,
-                             step=0.05,
-                             default=0.5,
-                             label='Minimum Detection Confidence'),
-            gr.inputs.Radio(background_colors,
-                            type='value',
-                            default=background_colors[0],
-                            label='Background Color'),
-        ],
-        gr.outputs.Image(type='numpy', label='Output'),
-        examples=examples,
-        title=TITLE,
-        description=DESCRIPTION,
-        article=ARTICLE,
-        theme=args.theme,
-        allow_flagging=args.allow_flagging,
-        live=args.live,
-    ).launch(
-        enable_queue=args.enable_queue,
-        server_port=args.port,
-        share=args.share,
-    )
-
-
-if __name__ == '__main__':
-    main()
+gr.Interface(
+    fn=run,
+    inputs=[
+        gr.Image(label='Input', type='numpy'),
+        gr.Radio(label='Model Complexity',
+                 choices=model_complexities,
+                 type='index',
+                 value=model_complexities[1]),
+        gr.Checkbox(default=True, label='Enable Segmentation'),
+        gr.Slider(label='Minimum Detection Confidence',
+                  minimum=0,
+                  maximum=1,
+                  step=0.05,
+                  value=0.5),
+        gr.Radio(label='Background Color',
+                 choices=background_colors,
+                 type='value',
+                 value=background_colors[0]),
+    ],
+    outputs=gr.Image(label='Output', type='numpy'),
+    examples=examples,
+    title=TITLE,
+    description=DESCRIPTION,
+).launch(show_api=False)
