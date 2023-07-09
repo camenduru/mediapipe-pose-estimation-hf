@@ -2,20 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import pathlib
-import shlex
-import subprocess
-import tarfile
-
-if os.environ.get('SYSTEM') == 'spaces':
-    subprocess.call(shlex.split('pip uninstall -y opencv-python'))
-    subprocess.call(shlex.split('pip uninstall -y opencv-python-headless'))
-    subprocess.call(
-        shlex.split('pip install opencv-python-headless==4.5.5.64'))
 
 import gradio as gr
-import huggingface_hub
 import mediapipe as mp
 import numpy as np
 
@@ -25,24 +14,6 @@ mp_pose = mp.solutions.pose
 
 TITLE = 'MediaPipe Human Pose Estimation'
 DESCRIPTION = 'https://google.github.io/mediapipe/'
-
-HF_TOKEN = os.getenv('HF_TOKEN')
-
-
-def load_sample_images() -> list[pathlib.Path]:
-    image_dir = pathlib.Path('images')
-    if not image_dir.exists():
-        image_dir.mkdir()
-        dataset_repo = 'hysts/input-images'
-        filenames = ['002.tar']
-        for name in filenames:
-            path = huggingface_hub.hf_hub_download(dataset_repo,
-                                                   name,
-                                                   repo_type='dataset',
-                                                   use_auth_token=HF_TOKEN)
-            with tarfile.open(path) as f:
-                f.extractall(image_dir.as_posix())
-    return sorted(image_dir.rglob('*.jpg'))
 
 
 def run(image: np.ndarray, model_complexity: int, enable_segmentation: bool,
@@ -82,10 +53,9 @@ def run(image: np.ndarray, model_complexity: int, enable_segmentation: bool,
 model_complexities = list(range(3))
 background_colors = ['white', 'black', 'green']
 
-image_paths = load_sample_images()
-examples = [[
-    path.as_posix(), model_complexities[1], True, 0.5, background_colors[0]
-] for path in image_paths]
+image_paths = sorted(pathlib.Path('images').rglob('*.jpg'))
+examples = [[path, model_complexities[1], True, 0.5, background_colors[0]]
+            for path in image_paths]
 
 gr.Interface(
     fn=run,
@@ -95,7 +65,7 @@ gr.Interface(
                  choices=model_complexities,
                  type='index',
                  value=model_complexities[1]),
-        gr.Checkbox(default=True, label='Enable Segmentation'),
+        gr.Checkbox(label='Enable Segmentation', value=True),
         gr.Slider(label='Minimum Detection Confidence',
                   minimum=0,
                   maximum=1,
@@ -106,8 +76,8 @@ gr.Interface(
                  type='value',
                  value=background_colors[0]),
     ],
-    outputs=gr.Image(label='Output', type='numpy'),
+    outputs=gr.Image(label='Output', height=500),
     examples=examples,
     title=TITLE,
     description=DESCRIPTION,
-).launch(show_api=False)
+).queue().launch()
